@@ -34,9 +34,9 @@ Other commands: `/boneprofiler` (toggle window), `/bp export` (open report), `/b
 
 ## Understanding the results
 
-High addon CPU deltas can indicate expensive Lua execution. High memory usage alone **does not prove** an addon is responsible for low FPS. Compare timing, repeated spikes, and which addons were active when the issue occurred.
+When native CPU data is unavailable, it is displayed as unavailable, not measured zero. Low-FPS episodes track onset, recovery and associated memory changes. High addon CPU deltas can indicate expensive Lua execution. High memory usage alone **does not prove** an addon is responsible for low FPS. Compare timing, repeated spikes, and which addons were active when the issue occurred.
 
-**Important limitations:** WoW 3.3.5a cannot expose Windows processes, GPU bottlenecks, or every individual Lua function through its standard addon API. Script CPU profiling can add overhead and does not measure all rendering costs. This version samples once per second, so it does not preserve every individual frame. This is a **v1.0.0 test build**; in-game verification is still pending.
+**Important limitations:** WoW 3.3.5a cannot expose Windows processes, GPU bottlenecks, or every individual Lua function through its standard addon API. Script CPU profiling can add overhead and does not measure all rendering costs. This version samples once per second, so it does not preserve every individual frame. This is a **v1.0.2 test build**; in-game verification is still pending.
 
 ## Compatibility
 
@@ -49,6 +49,6 @@ High addon CPU deltas can indicate expensive Lua execution. High memory usage al
 **Maintainer:** Uncle Bone  
 **Repository:** https://github.com/uncle-bone/BoneProfiler  
 **License:** MIT  
-**Current version:** v1.0.0 (test build)
+**Current version:** v1.0.2 (test build)
 
 See [CHANGELOG.md](CHANGELOG.md) for version history.
