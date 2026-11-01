@@ -1,3 +1,8 @@
+## v1.0.6 — Stable current build
+- Add FPS-based background-throttling hints using the 62/30 FPS caps.
+- Add timestamps for suspected transitions and `/bp mark` for manual Alt+Tab test markers.
+- These hints do not directly detect Windows focus state.
+
 # BoneProfiler Changelog
 
 ## v1.0.2 TEST — CPU unavailable handling and episode tracking
