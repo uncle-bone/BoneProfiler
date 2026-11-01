@@ -1,0 +1,7 @@
+## Interface: 30300
+## Title: BoneProfiler |cff77ccffCoA Diagnostics|r
+## Notes: FPS, addon CPU/memory, stutter and session diagnostics for WoW 3.3.5a
+## Author: Uncle Bone
+## Version: 1.0.0
+## SavedVariables: BoneProfilerDB
+BoneProfiler.lua
