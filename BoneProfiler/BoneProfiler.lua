@@ -6,6 +6,8 @@ local now = GetTime
 local db, session, elapsed, lastSample, lastCpu, lastMem, nextRefresh = nil, {}, 0, 0, {}, {}, 0
 local spikeThreshold, samplePeriod, maxSamples = 100, 1, 900
 local profiling = GetCVar('scriptProfile') == '1'
+local cpuAPI = type(GetAddOnCPUUsage)=='function' and type(UpdateAddOnCPUUsage)=='function'
+local function cpuStatus() return 'CVar='..tostring(GetCVar('scriptProfile'))..', API='..(cpuAPI and 'available' or 'missing') end
 local function say(s) DEFAULT_CHAT_FRAME:AddMessage('|cff55bbffBoneProfiler:|r '..s) end
 local function safe(f, ...) if type(f)~='function' then return nil end local ok, result = pcall(f, ...); if ok then return result end end
 local function round(x) return floor((x or 0)*10+0.5)/10 end
@@ -35,12 +37,12 @@ local function top(list,field,count)
 end
 local function sample(dt, fps)
  if UpdateAddOnMemoryUsage then pcall(UpdateAddOnMemoryUsage) end
- if profiling and UpdateAddOnCPUUsage then pcall(UpdateAddOnCPUUsage) end
+ if profiling and cpuAPI then pcall(UpdateAddOnCPUUsage) end
  local addons=getAddons()
  local memory, cpu, cpuDelta = 0, 0, 0
  for _,a in ipairs(addons) do
   memory=memory+a.memory
-  if profiling then
+  if profiling and cpuAPI then
    local old=lastCpu[a.name] or a.cpu
    a.deltaCPU=max(0,a.cpu-old)
    cpuDelta=cpuDelta+a.deltaCPU
@@ -64,7 +66,7 @@ local function sample(dt, fps)
 end
 local function escape(s) return tostring(s or ''):gsub('[\r\n\t]',' ') end
 local function export()
- local out={'BoneProfiler v1.0.0 | '..date('%Y-%m-%d %H:%M:%S'), 'scriptProfile='..(profiling and '1' or '0')..' (requires UI restart after changing)', 'Time(s)\tFPS\tFrame(ms)\tMemory(KB)\tCPU delta(ms)\tZone\tCombat\tTop CPU\tTop Memory'}
+ local out={'BoneProfiler v1.0.0 | '..date('%Y-%m-%d %H:%M:%S'), 'scriptProfile='..(profiling and '1' or '0')..' ('..cpuStatus()..'; requires full client restart)', 'Time(s)\tFPS\tFrame(ms)\tMemory(KB)\tCPU delta(ms)\tZone\tCombat\tTop CPU\tTop Memory'}
  for _,s in ipairs(session) do out[#out+1]=format('%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s',s.time,s.fps,s.frameMs,s.memoryKB,s.cpuDeltaMs,escape(s.zone),tostring(s.inCombat),escape(s.topCPU),escape(s.topMemory)) end
  out[#out+1]='SPIKES (saved between sessions): '..#db.spikes
  for _,s in ipairs(db.spikes) do out[#out+1]=format('spike t=%s fps=%s frame=%sms cpu=%sms top=%s',s.time,s.fps,s.frameMs,s.cpuDeltaMs,escape(s.topCPU)) end
@@ -94,7 +96,7 @@ ui:Hide()
 local function showStats()
  local s=session[#session]
  if not s then return end
- local text=format('FPS: %.1f  |  Last sampled frame: %.1f ms  |  Addon memory: %.1f MB\nCPU profiling: %s  |  CPU used during sample: %.1f ms\nSamples: %d  |  Saved spikes: %d  |  Zone: %s\n\nTop CPU since last sample: %s\n\nTop memory: %s',s.fps,s.frameMs,s.memoryKB/1024,profiling and 'ENABLED' or 'OFF',s.cpuDeltaMs,#session,#db.spikes,s.zone,s.topCPU,s.topMemory)
+ local text=format('FPS: %.1f  |  Last sampled frame: %.1f ms  |  Addon memory: %.1f MB\nCPU profiling: %s  |  CPU used during sample: %.1f ms\nSamples: %d  |  Saved spikes: %d  |  Zone: %s\n\nTop CPU since last sample: %s\n\nTop memory: %s',s.fps,s.frameMs,s.memoryKB/1024,(profiling and cpuAPI) and 'ENABLED' or ('UNAVAILABLE: '..cpuStatus()),s.cpuDeltaMs,#session,#db.spikes,s.zone,s.topCPU,s.topMemory)
  stats:SetText(text)
 end
 local ticker=0
@@ -115,7 +117,7 @@ A:SetScript('OnEvent',function(self,event,arg)
  if event=='ADDON_LOADED' and arg=='BoneProfiler' then
   BoneProfilerDB=BoneProfilerDB or {};db=BoneProfilerDB;db.spikes=db.spikes or {};if db.alerts==nil then db.alerts=false end
  elseif event=='PLAYER_LOGIN' then
-  elapsed=now();say('Monitoring started. Open with /bp. CPU profiling '..(profiling and 'ON' or 'OFF')..'.')
+  elapsed=now();say('Monitoring started. Open with /bp. CPU: '..cpuStatus()..'.')
  elseif event=='PLAYER_LOGOUT' then
   if db then db.lastSessionSummary={samples=#session,spikes=#db.spikes,date=date('%Y-%m-%d %H:%M')} end
  end
@@ -124,9 +126,10 @@ SLASH_BONEPROFILER1='/bp';SLASH_BONEPROFILER2='/boneprofiler'
 SlashCmdList.BONEPROFILER=function(msg)
  msg=(msg or ''):lower():gsub('^%s+',''):gsub('%s+$','')
  if msg=='cpu on' then
-  SetCVar('scriptProfile','1');say('CPU profiling enabled in settings. RESTART the game client to activate it; profiling has overhead.')
+  SetCVar('scriptProfile','1');say('Requested scriptProfile=1. Actual: '..cpuStatus()..'. If it resets on restart, set SET scriptProfile "1" in WTF/Config.wtf with WoW closed. Restart the entire client.')
  elseif msg=='cpu off' then
-  SetCVar('scriptProfile','0');say('CPU profiling disabled in settings. RESTART game client to apply.')
+  SetCVar('scriptProfile','0');say('Requested scriptProfile=0. Actual: '..cpuStatus()..'. Restart the client.')
+ elseif msg=='cpu status' then say('CPU diagnostic: '..cpuStatus()..'; boot-time detected='..tostring(profiling))
  elseif msg=='export' then ui:Show();refreshExport()
  elseif msg=='clear' then session={};db.spikes={};say('Samples and spikes cleared.')
  else if ui:IsShown() then ui:Hide() else ui:Show();showStats() end end
