@@ -17,9 +17,11 @@ It was created to investigate severe, delayed FPS drops after login, but is inte
 
 ## Download
 
-**[Download BoneProfiler from GitHub (ZIP)](https://github.com/uncle-bone/BoneProfiler/archive/refs/heads/main.zip)**
+**[Download BoneProfiler v1.0.6 — Current stable release](https://github.com/uncle-bone/BoneProfiler/releases/download/v1.0.6/BoneProfiler-v1.0.6.zip)**
 
-The GitHub source archive has an outer repository folder. Copy **only the `BoneProfiler` folder** into your WoW installation's `Interface/AddOns/` directory.
+Extract the included `BoneProfiler` folder into `Interface/AddOns/`.
+
+v1.0.6 adds FPS-based background-throttling hints using the configured 62/30 FPS caps, timestamps for suspected transitions, and `/bp mark` for manually recording Alt+Tab tests. The hints use observed frame rate; they do not directly detect Windows focus state.
 
 ## Getting started
 
