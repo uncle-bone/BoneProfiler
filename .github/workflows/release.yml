@@ -1,0 +1,59 @@
+name: Build and publish BoneProfiler
+on:
+  push:
+    branches: [main]
+    paths: ['.release.json']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: boneprofiler-release
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate and package addon
+        run: |
+          python3 - <<'PY'
+          import pathlib, json, zipfile, re, os
+          root=pathlib.Path('.')
+          cfg=json.loads((root/'.release.json').read_text())
+          assert re.fullmatch(r'v[0-9]+(?:\.[0-9]+)+(?:-TEST)?',cfg['version'])
+          folders=cfg['folders']
+          assert folders == ['BoneProfiler']
+          for name in folders:
+              folder=root/name
+              assert folder.is_dir()
+              tocs=list(folder.glob('*.toc'))
+              assert tocs
+              for toc in tocs:
+                  for raw in toc.read_text(encoding='utf-8-sig').splitlines():
+                      line=raw.strip()
+                      if not line or line.startswith('#'): continue
+                      assert (toc.parent/line.replace('\\','/')).is_file(), 'Missing TOC file: '+line
+          out=root/'dist'; out.mkdir(exist_ok=True)
+          artifact=out/('BoneProfiler-'+cfg['version']+'.zip')
+          with zipfile.ZipFile(artifact,'w',zipfile.ZIP_DEFLATED) as z:
+              for name in folders:
+                  for p in sorted((root/name).rglob('*')):
+                      if p.is_file(): z.write(p,p.as_posix())
+              if (root/'LICENSE').is_file(): z.write(root/'LICENSE','LICENSE')
+          with zipfile.ZipFile(artifact) as z: assert z.testzip() is None
+          with open(os.environ['GITHUB_ENV'],'a') as f:
+              f.write('VERSION='+cfg['version']+'\n')
+              f.write('ASSET='+str(artifact)+'\n')
+              f.write('PRERELEASE='+str(cfg.get('prerelease',True)).lower()+'\n')
+          PY
+      - name: Publish release and ZIP
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          args=()
+          if [ "$PRERELEASE" = true ]; then args+=(--prerelease --latest=false); else args+=(--latest); fi
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+            echo "::error::Release already exists"; exit 1
+          fi
+          gh release create "$VERSION" "$ASSET" --target "$GITHUB_SHA" --title "BoneProfiler $VERSION" --notes-file RELEASE-NOTES.md "${args[@]}"
