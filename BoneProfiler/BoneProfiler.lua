@@ -1,4 +1,4 @@
--- BoneProfiler 1.0.0 / WoW 3.3.5a. No external libraries.
+-- BoneProfiler 1.0.2 / WoW 3.3.5a. No external libraries.
 local A = CreateFrame('Frame', 'BoneProfilerFrame', UIParent)
 local floor, format, sort, max = math.floor, string.format, table.sort, math.max
 local tinsert, tremove = table.insert, table.remove
@@ -7,6 +7,9 @@ local db, session, elapsed, lastSample, lastCpu, lastMem, nextRefresh = nil, {},
 local spikeThreshold, samplePeriod, maxSamples = 100, 1, 900
 local profiling = GetCVar('scriptProfile') == '1'
 local cpuAPI = type(GetAddOnCPUUsage)=='function' and type(UpdateAddOnCPUUsage)=='function'
+local cpuObserved = false
+local episodeStart, episodeLow, episodeMin, episodeMem = nil, 0, 999, 0
+local episodes = {}
 local function cpuStatus() return 'CVar='..tostring(GetCVar('scriptProfile'))..', API='..(cpuAPI and 'available' or 'missing') end
 local function say(s) DEFAULT_CHAT_FRAME:AddMessage('|cff55bbffBoneProfiler:|r '..s) end
 local function safe(f, ...) if type(f)~='function' then return nil end local ok, result = pcall(f, ...); if ok then return result end end
@@ -43,6 +46,7 @@ local function sample(dt, fps)
  for _,a in ipairs(addons) do
   memory=memory+a.memory
   if profiling and cpuAPI then
+   if a.cpu > 0 then cpuObserved = true end
    local old=lastCpu[a.name] or a.cpu
    a.deltaCPU=max(0,a.cpu-old)
    cpuDelta=cpuDelta+a.deltaCPU
@@ -54,11 +58,29 @@ local function sample(dt, fps)
  for _,a in ipairs(addons) do cpuList[#cpuList+1]={name=a.name,deltaCPU=a.deltaCPU or 0} end
  local s={time=round(now()-elapsed),fps=round(fps),frameMs=round(dt*1000),memoryKB=round(memory),cpuDeltaMs=round(cpuDelta),topCPU=top(cpuList,'deltaCPU',5),topMemory=top(addons,'memory',5),zone=GetZoneText() or '',inCombat=UnitAffectingCombat('player') and true or false}
  push(s)
+ -- Native CPU is unknown until the client supplies positive counters.
+ if not (profiling and cpuAPI and cpuObserved) then
+  s.cpuDeltaMs=nil
+  s.topCPU='UNAVAILABLE: no usable native CPU counters'
+ end
+ if s.fps<=15 then
+  if not episodeStart then episodeStart=s.time; episodeMin=s.fps; episodeMem=s.memoryKB end
+  episodeLow=0;episodeMin=math.min(episodeMin,s.fps)
+ elseif episodeStart then
+  episodeLow=episodeLow+1
+  if episodeLow>=2 then
+   local e={start=episodeStart,finish=s.time,duration=round(s.time-episodeStart),minFPS=episodeMin,memoryDeltaKB=round(s.memoryKB-episodeMem)}
+   episodes[#episodes+1]=e
+   db.episodes=db.episodes or {}; db.episodes[#db.episodes+1]=e
+   if #db.episodes>80 then table.remove(db.episodes,1) end
+   episodeStart=nil;episodeLow=0;episodeMin=999
+  end
+ end
  if s.frameMs>=spikeThreshold or s.fps<=10 then
   db.spikes[#db.spikes+1]=s
   if #db.spikes>250 then tremove(db.spikes,1) end
   if db.alerts and (not lastSample or now()-lastSample>=5) then
-   say(format('Stutter: %.0f FPS, %.0f ms frame; CPU interval %.0f ms. Top: %s',s.fps,s.frameMs,s.cpuDeltaMs,s.topCPU))
+   say(format('Stutter: %.0f FPS, %.0f ms frame; CPU interval %.0f ms. Top: %s',s.fps,s.frameMs,(s.cpuDeltaMs or -1),s.topCPU))
    lastSample=now()
   end
  end
@@ -66,8 +88,10 @@ local function sample(dt, fps)
 end
 local function escape(s) return tostring(s or ''):gsub('[\r\n\t]',' ') end
 local function export()
- local out={'BoneProfiler v1.0.0 | '..date('%Y-%m-%d %H:%M:%S'), 'scriptProfile='..(profiling and '1' or '0')..' ('..cpuStatus()..'; requires full client restart)', 'Time(s)\tFPS\tFrame(ms)\tMemory(KB)\tCPU delta(ms)\tZone\tCombat\tTop CPU\tTop Memory'}
- for _,s in ipairs(session) do out[#out+1]=format('%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s',s.time,s.fps,s.frameMs,s.memoryKB,s.cpuDeltaMs,escape(s.zone),tostring(s.inCombat),escape(s.topCPU),escape(s.topMemory)) end
+ local out={'BoneProfiler v1.0.2 TEST | '..date('%Y-%m-%d %H:%M:%S'), 'scriptProfile='..(profiling and '1' or '0')..' ('..cpuStatus()..'; requires full client restart)', 'CPU availability='..(cpuObserved and 'OBSERVED COUNTERS' or 'UNAVAILABLE (not zero)'), 'Time(s)\tFPS\tFrame(ms)\tMemory(KB)\tCPU delta(ms)\tZone\tCombat\tTop CPU\tTop Memory'}
+ for _,s in ipairs(session) do out[#out+1]=format('%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s',s.time,s.fps,s.frameMs,s.memoryKB,(s.cpuDeltaMs and tostring(s.cpuDeltaMs) or 'NA'),escape(s.zone),tostring(s.inCombat),escape(s.topCPU),escape(s.topMemory)) end
+ out[#out+1]='EPISODES: '..#episodes
+ for _,e in ipairs(episodes) do out[#out+1]=format('episode start=%.1fs end=%.1fs duration=%.1fs minFPS=%.1f memoryDeltaKB=%.1f (correlation only)',e.start,e.finish,e.duration,e.minFPS,e.memoryDeltaKB) end
  out[#out+1]='SPIKES (saved between sessions): '..#db.spikes
  for _,s in ipairs(db.spikes) do out[#out+1]=format('spike t=%s fps=%s frame=%sms cpu=%sms top=%s',s.time,s.fps,s.frameMs,s.cpuDeltaMs,escape(s.topCPU)) end
  return table.concat(out,'\n')
@@ -78,7 +102,7 @@ ui:SetBackdrop({bgFile='Interface\\DialogFrame\\UI-DialogBox-Background',edgeFil
 local function label(parent,txt,x,y,width,height,size)
  local f=parent:CreateFontString(nil,'OVERLAY','GameFontNormal');f:SetPoint('TOPLEFT',x,y);f:SetWidth(width);f:SetHeight(height);f:SetJustifyH('LEFT');f:SetJustifyV('TOP');f:SetText(txt);return f
 end
-label(ui,'BoneProfiler 1.0.0 — Conquest Reborn',18,-15,490,25)
+label(ui,'BoneProfiler 1.0.2 TEST — Conquest Reborn',18,-15,490,25)
 local close=CreateFrame('Button',nil,ui,'UIPanelCloseButton');close:SetPoint('TOPRIGHT',-4,-5)
 local stats=label(ui,'Initializing...',20,-52,525,170)
 local function button(txt,x,y,w,fn)
@@ -96,7 +120,7 @@ ui:Hide()
 local function showStats()
  local s=session[#session]
  if not s then return end
- local text=format('FPS: %.1f  |  Last sampled frame: %.1f ms  |  Addon memory: %.1f MB\nCPU profiling: %s  |  CPU used during sample: %.1f ms\nSamples: %d  |  Saved spikes: %d  |  Zone: %s\n\nTop CPU since last sample: %s\n\nTop memory: %s',s.fps,s.frameMs,s.memoryKB/1024,(profiling and cpuAPI) and 'ENABLED' or ('UNAVAILABLE: '..cpuStatus()),s.cpuDeltaMs,#session,#db.spikes,s.zone,s.topCPU,s.topMemory)
+ local text=format('FPS: %.1f  |  Last sampled frame: %.1f ms  |  Addon memory: %.1f MB\nCPU profiling: %s  |  CPU used during sample: %.1f ms\nSamples: %d  |  Saved spikes: %d  |  Zone: %s\n\nTop CPU since last sample: %s\n\nTop memory: %s',s.fps,s.frameMs,s.memoryKB/1024,(profiling and cpuAPI) and 'ENABLED' or ('UNAVAILABLE: '..cpuStatus()),(s.cpuDeltaMs or -1),#session,#db.spikes,s.zone,s.topCPU,s.topMemory)
  stats:SetText(text)
 end
 local ticker=0
@@ -115,7 +139,7 @@ end)
 A:RegisterEvent('ADDON_LOADED');A:RegisterEvent('PLAYER_LOGIN');A:RegisterEvent('PLAYER_LOGOUT')
 A:SetScript('OnEvent',function(self,event,arg)
  if event=='ADDON_LOADED' and arg=='BoneProfiler' then
-  BoneProfilerDB=BoneProfilerDB or {};db=BoneProfilerDB;db.spikes=db.spikes or {};if db.alerts==nil then db.alerts=false end
+  BoneProfilerDB=BoneProfilerDB or {};db=BoneProfilerDB;db.spikes=db.spikes or {};db.episodes=db.episodes or {};if db.alerts==nil then db.alerts=false end
  elseif event=='PLAYER_LOGIN' then
   elapsed=now();say('Monitoring started. Open with /bp. CPU: '..cpuStatus()..'.')
  elseif event=='PLAYER_LOGOUT' then
