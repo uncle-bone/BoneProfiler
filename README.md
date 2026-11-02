@@ -1,4 +1,5 @@
 # BoneProfiler
+
 > **[Download](https://github.com/uncle-bone/BoneProfiler/releases/latest)**
 
 **Find the addon behind your FPS drops.** BoneProfiler is a standalone in-game performance diagnostic tool built for **Ascension Conquest of Azeroth / Conquest Reborn**, running on the **World of Warcraft 3.3.5a** client.
@@ -18,7 +19,7 @@ It was created to investigate severe, delayed FPS drops after login, but is inte
 
 ## Download
 
-**[Download](https://github.com/uncle-bone/BoneProfiler/releases/download/v1.0.6/BoneProfiler-v1.0.6.zip)**
+**[Download](https://github.com/uncle-bone/BoneProfiler/releases/latest)**
 
 Extract the included `BoneProfiler` folder into `Interface/AddOns/`.
 
