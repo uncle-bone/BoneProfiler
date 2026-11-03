@@ -1,6 +1,7 @@
 # BoneProfiler
 
-> **[Download](https://github.com/uncle-bone/BoneProfiler/releases/latest)**
+> **[Download Here!](https://coa-research.unclebone.workers.dev/download/BoneProfiler)**
+**Current stable release: v1.0.6.**
 
 **Find the addon behind your FPS drops.** BoneProfiler is a standalone in-game performance diagnostic tool built for **Ascension Conquest of Azeroth / Conquest Reborn**, running on the **World of Warcraft 3.3.5a** client.
 
